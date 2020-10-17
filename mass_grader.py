@@ -4,7 +4,9 @@ import sys
 import math
 import xlwt
 import time 
-from xlwt import Workbook
+import io
+from chardet import detect
+from xlwt import Workbook  
 
 def convert(seconds): 
     seconds = seconds % (24 * 3600) 
@@ -46,11 +48,21 @@ for file in submission_files:
 	if len(file) > len(extension) and file[-1*(len(extension)):] == extension:
 		code_files.append(file)
 
+#removes nonascii characters
+for file in code_files:
+	filename = 'submissions/' + file
+	print(filename)
+	with open(filename, 'r', encoding='ISO-8859-1') as f:
+	    text = f.read()
+	    text = ''.join([c if ord(c) < 128 else '' for c in text])
+	with open(filename, 'w', encoding='ISO-8859-1') as f:
+	    f.write(text)
+
 wb = Workbook()
 sheet = wb.add_sheet('Student Grades') 
 sheet.write(0,0, 'Student Name')
 sheet.write(0,1, 'Result')
-sheet.write(0,2, 'Percentage')
+sheet.write(0,2, 'Score (Out of 75)')
 
 if verbose:
 	print('Submitting ' + str(len(code_files)) + " " + extension + ' files for evaluation...')
@@ -60,23 +72,26 @@ start = time.time()
 for i, file in enumerate(code_files):
 	name = file[:file.find('_')]
 	sheet.write(i + 1, 0, name)
-
 	args = ['submitter', 'submit', '-l', lang, 'submissions/' + file]
 	p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-	result = p.stdout.readlines()[-1][:-3].decode('utf-8')
-	if verbose:
-		print('Result for ' + name + ': ' + result)
+	result = ""
 
-	#try again
-	if 'error' in result.lower() or 'id' in result.lower() or result == '':
-		if verbose:
-			print('\nError in the latest submission, trying again...')
-		p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	try:
 		result = p.stdout.readlines()[-1][:-3].decode('utf-8')
-		if 'error' in result.lower() or 'clientid' in result.lower() or result == '':
+		if verbose:
+			print('Result for ' + name + ': ' + result)
+		#try again
+		if 'c++' in result.lower() or 'codec' in result.lower() or 'error' in result.lower() or 'id' in result.lower() or result == '':
 			if verbose:
-				print('Error persists. Manually review the submission of ' + name + '\n')
-			result = 'Needs manual revision'
+				print('\nError in the latest submission, trying again...')
+			p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			result = p.stdout.readlines()[-1][:-3].decode('utf-8')
+			if 'c++' in result.lower() or 'codec' in result.lower() or 'error' in result.lower() or 'id' in result.lower() or result == '':
+				if verbose:
+					print('Error persists. Manually review the submission of ' + name + '\n')
+				result = 'Needs manual revision'
+	except:	
+		result = "???"
 
 	sheet.write(i + 1, 1, result)
 
@@ -85,9 +100,9 @@ for i, file in enumerate(code_files):
 		second_space = result.find(" ", result.find('of'))
 		third_space = result.find("test") - 1
 		score = int(result[:first_space])
-		total = int(result[second_space + 1:third_space])
-		percentage = str(math.ceil((score/total * 100))) + "%"
-		sheet.write(i + 1, 2, percentage)
+		#total = int(result[second_space + 1:third_space])
+		#percentage = str(math.ceil((score/total * 100))) + "%"
+		sheet.write(i + 1, 2, score * 5)
 	except:
 		sheet.write(i + 1, 2, 'NaN')
 
